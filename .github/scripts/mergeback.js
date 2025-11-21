@@ -12,8 +12,9 @@ module.exports = async ({ github, context }, env = {}) => {
 };
 
 async function createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch) {
+  const sourceBranchWithSha = `${context.sha.substring(0, 7)}/${sourceBranch}`;
+
   try {
-    const sourceBranchWithSha = `${context.sha.substring(0, 7)}/${sourceBranch}`;
     const newBranchName = `merge-back-${sourceBranchWithSha}-into-${targetBranch}`;
     console.log(`Creating mergeback: ${newBranchName}`);
 
