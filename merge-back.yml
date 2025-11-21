@@ -1,0 +1,32 @@
+name: Automatic Merge Back
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to merge back from'
+        required: false
+        default: 'main'
+
+jobs:
+  mergeback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.branch || 'main' }}
+      - name: Get unmerged releases
+        id: merged-releases
+        run: |
+          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          git branch -a --no-merged $BRANCH | grep origin/release | sed 's/remotes\/origin\///' > no-merged-releases.txt || true
+        shell: bash
+      - name: Create mergeback PRs
+        uses: actions/github-script@v6
+        env:
+          CI_USER: 'sitemate-ci'
+        with:
+          script: |
+            const script = require('./.github/scripts/mergeback.js')
+            await script({github, context, core}, process.env)
