@@ -1,42 +1,33 @@
-const fs = require('fs');
-
-const falsyEntries = (a) => !!a;
-const removeLeadingTrailingSpaces = (a) => a.trim();
-
 let ciUser;
 
 module.exports = async ({ github, context }, env = {}) => {
-  const branchToMerge = context.ref.replace('refs/heads/', '');
+  const sourceBranch = 'main';
+  const targetBranch = env.TARGET_BRANCH;
+  const sourceSha = env.SOURCE_SHA;
   ciUser = env.CI_USER ?? '';
 
-  console.log(`Detected push to ${branchToMerge}`);
+  console.log(`Creating mergeback PR from ${sourceBranch} to ${targetBranch}`);
+  console.log(`Using SHA: ${sourceSha}`);
 
-  const unmergedReleases = fs
-    .readFileSync('no-merged-releases.txt', 'utf-8')
-    .split('\n')
-    .filter(falsyEntries)
-    .map(removeLeadingTrailingSpaces);
-
-  const mergeActions = unmergedReleases.map((unmergedRelease) =>
-    createMergeBackPullRequest({ github, context }, branchToMerge, unmergedRelease),
-  );
-  await Promise.all(mergeActions);
-  console.log('Finished creating pull requests');
+  await createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch, sourceSha);
+  console.log('Finished creating pull request');
 };
 
-async function createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch) {
+async function createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch, sourceSha) {
+  const sourceBranchWithSha = `${sourceSha.substring(0, 7)}/${sourceBranch}`;
+
   try {
-    const sourceBranchWithSha = `${context.sha.substring(0, 7)}/${sourceBranch}`;
     const newBranchName = `merge-back-${sourceBranchWithSha}-into-${targetBranch}`;
     console.log(`Creating mergeback: ${newBranchName}`);
 
-    // Create new branch from base branch
-    const newMergeBranch = await github.rest.git.createRef({
+    // Create new branch from source SHA
+    await github.rest.git.createRef({
       owner: context.repo.owner,
       repo: context.repo.repo,
       ref: `refs/heads/${newBranchName}`,
-      sha: context.sha,
+      sha: sourceSha,
     });
+    console.log(`Created branch ${newBranchName}`);
 
     const user = context.payload.sender.login;
     const assignees = [];
@@ -45,15 +36,29 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
       assignees.push(user);
     }
 
+    // Check if PR already exists
+    const existingPRs = await github.rest.pulls.list({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      head: `${context.repo.owner}:${newBranchName}`,
+      base: targetBranch,
+      state: 'open',
+    });
+
+    if (existingPRs.data.length > 0) {
+      console.log(`PR already exists: ${existingPRs.data[0].html_url}`);
+      return;
+    }
+
     // Create pull request to merge
     const createdPR = await github.rest.pulls.create({
       owner: context.repo.owner,
       repo: context.repo.repo,
       title: `[BOT] Merge back: ${sourceBranchWithSha} into ${targetBranch} 🤖`,
-      body: `Automatic merging back ${sourceBranchWithSha} into ${targetBranch}! ${assignees
+      body: `Manual merging back ${sourceBranchWithSha} into ${targetBranch}! ${assignees
         .map((assignee) => `@${assignee}`)
         .join(' ')} Please verify that the merge is correct.`,
-      head: newMergeBranch.data.ref,
+      head: newBranchName,
       base: targetBranch,
     });
 
@@ -64,7 +69,11 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
       issue_number: createdPR.data.number,
       assignees,
     });
+
+    console.log(`Successfully created PR: ${createdPR.data.html_url}`);
   } catch (error) {
-    console.log(`Pull request not created ${sourceBranchWithSha} into ${targetBranch}`, error);
+    console.error(`Failed to create pull request from ${sourceBranchWithSha} into ${targetBranch}`);
+    console.error(`Error details: ${error.message}`);
+    throw error;
   }
 }
