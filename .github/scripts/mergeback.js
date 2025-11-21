@@ -20,19 +20,52 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
     const newBranchName = `merge-back-${sourceBranchWithSha}-into-${targetBranch}`;
     console.log(`Creating mergeback: ${newBranchName}`);
 
-    // Create new branch from base branch
-    const newMergeBranch = await github.rest.git.createRef({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      ref: `refs/heads/${newBranchName}`,
-      sha: sourceSha,
-    });
+    // Check if branch already exists
+    let branchExists = false;
+    try {
+      await github.rest.git.getRef({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        ref: `heads/${newBranchName}`,
+      });
+      branchExists = true;
+      console.log(`Branch ${newBranchName} already exists, using existing branch`);
+    } catch (error) {
+      if (error.status !== 404) {
+        throw error;
+      }
+    }
+
+    // Create new branch from base branch if it doesn't exist
+    if (!branchExists) {
+      await github.rest.git.createRef({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        ref: `refs/heads/${newBranchName}`,
+        sha: sourceSha,
+      });
+      console.log(`Created branch ${newBranchName}`);
+    }
 
     const user = context.payload.sender.login;
     const assignees = [];
     // Exclude CI account from tagging
     if (user !== ciUser) {
       assignees.push(user);
+    }
+
+    // Check if PR already exists
+    const existingPRs = await github.rest.pulls.list({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      head: `${context.repo.owner}:${newBranchName}`,
+      base: targetBranch,
+      state: 'open',
+    });
+
+    if (existingPRs.data.length > 0) {
+      console.log(`PR already exists: ${existingPRs.data[0].html_url}`);
+      return;
     }
 
     // Create pull request to merge
