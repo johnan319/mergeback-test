@@ -20,32 +20,14 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
     const newBranchName = `merge-back-${sourceBranchWithSha}-into-${targetBranch}`;
     console.log(`Creating mergeback: ${newBranchName}`);
 
-    // Check if branch already exists
-    let branchExists = false;
-    try {
-      await github.rest.git.getRef({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        ref: `heads/${newBranchName}`,
-      });
-      branchExists = true;
-      console.log(`Branch ${newBranchName} already exists, using existing branch`);
-    } catch (error) {
-      if (error.status !== 404) {
-        throw error;
-      }
-    }
-
-    // Create new branch from base branch if it doesn't exist
-    if (!branchExists) {
-      await github.rest.git.createRef({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        ref: `refs/heads/${newBranchName}`,
-        sha: sourceSha,
-      });
-      console.log(`Created branch ${newBranchName}`);
-    }
+    // Create new branch from source SHA
+    await github.rest.git.createRef({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      ref: `refs/heads/${newBranchName}`,
+      sha: sourceSha,
+    });
+    console.log(`Created branch ${newBranchName}`);
 
     const user = context.payload.sender.login;
     const assignees = [];
@@ -73,7 +55,7 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
       owner: context.repo.owner,
       repo: context.repo.repo,
       title: `[BOT] Merge back: ${sourceBranchWithSha} into ${targetBranch} 🤖`,
-      body: `Automatic merging back ${sourceBranchWithSha} into ${targetBranch}! ${assignees
+      body: `Manual merging back ${sourceBranchWithSha} into ${targetBranch}! ${assignees
         .map((assignee) => `@${assignee}`)
         .join(' ')} Please verify that the merge is correct.`,
       head: newBranchName,
