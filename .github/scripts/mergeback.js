@@ -41,7 +41,7 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
       body: `Automatic merging back ${sourceBranchWithSha} into ${targetBranch}! ${assignees
         .map((assignee) => `@${assignee}`)
         .join(' ')} Please verify that the merge is correct.`,
-      head: newMergeBranch.data.ref,
+      head: newBranchName,
       base: targetBranch,
     });
 
