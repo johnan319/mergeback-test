@@ -12,17 +12,26 @@ on:
 jobs:
   mergeback:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout with full history
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: main
+
+      - name: Get current SHA
+        id: get_sha
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
       - name: Create mergeback PR
         uses: actions/github-script@v6
         env:
           CI_USER: 'sitemate-ci'
           TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
+          SOURCE_SHA: ${{ steps.get_sha.outputs.sha }}
         with:
           script: |
             const script = require('./.github/scripts/mergeback.js')

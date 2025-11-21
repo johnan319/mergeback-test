@@ -3,16 +3,18 @@ let ciUser;
 module.exports = async ({ github, context }, env = {}) => {
   const sourceBranch = 'main';
   const targetBranch = env.TARGET_BRANCH;
+  const sourceSha = env.SOURCE_SHA;
   ciUser = env.CI_USER ?? '';
 
   console.log(`Creating mergeback PR from ${sourceBranch} to ${targetBranch}`);
+  console.log(`Using SHA: ${sourceSha}`);
 
-  await createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch);
+  await createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch, sourceSha);
   console.log('Finished creating pull request');
 };
 
-async function createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch) {
-  const sourceBranchWithSha = `${context.sha.substring(0, 7)}/${sourceBranch}`;
+async function createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch, sourceSha) {
+  const sourceBranchWithSha = `${sourceSha.substring(0, 7)}/${sourceBranch}`;
 
   try {
     const newBranchName = `merge-back-${sourceBranchWithSha}-into-${targetBranch}`;
@@ -23,7 +25,7 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
       owner: context.repo.owner,
       repo: context.repo.repo,
       ref: `refs/heads/${newBranchName}`,
-      sha: context.sha,
+      sha: sourceSha,
     });
 
     const user = context.payload.sender.login;
@@ -52,7 +54,11 @@ async function createMergeBackPullRequest({ github, context }, sourceBranch, tar
       issue_number: createdPR.data.number,
       assignees,
     });
+
+    console.log(`Successfully created PR: ${createdPR.data.html_url}`);
   } catch (error) {
-    console.log(`Pull request not created ${sourceBranchWithSha} into ${targetBranch}`, error);
+    console.error(`Failed to create pull request from ${sourceBranchWithSha} into ${targetBranch}`);
+    console.error(`Error details: ${error.message}`);
+    throw error;
   }
 }
