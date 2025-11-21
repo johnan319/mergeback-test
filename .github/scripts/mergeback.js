@@ -1,27 +1,14 @@
-const fs = require('fs');
-
-const falsyEntries = (a) => !!a;
-const removeLeadingTrailingSpaces = (a) => a.trim();
-
 let ciUser;
 
 module.exports = async ({ github, context }, env = {}) => {
-  const branchToMerge = context.ref.replace('refs/heads/', '');
+  const sourceBranch = 'main';
+  const targetBranch = env.TARGET_BRANCH;
   ciUser = env.CI_USER ?? '';
 
-  console.log(`Detected push to ${branchToMerge}`);
+  console.log(`Creating mergeback PR from ${sourceBranch} to ${targetBranch}`);
 
-  const unmergedReleases = fs
-    .readFileSync('no-merged-releases.txt', 'utf-8')
-    .split('\n')
-    .filter(falsyEntries)
-    .map(removeLeadingTrailingSpaces);
-
-  const mergeActions = unmergedReleases.map((unmergedRelease) =>
-    createMergeBackPullRequest({ github, context }, branchToMerge, unmergedRelease),
-  );
-  await Promise.all(mergeActions);
-  console.log('Finished creating pull requests');
+  await createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch);
+  console.log('Finished creating pull request');
 };
 
 async function createMergeBackPullRequest({ github, context }, sourceBranch, targetBranch) {
